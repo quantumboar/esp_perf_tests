@@ -29,7 +29,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "freertos/semphr.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "stdatomic.h"
 
+#include "cpt_config.h"
 #include "cpt_job.h"
 
 typedef struct
@@ -42,8 +44,13 @@ typedef struct
 {
     cpt_preempt_task cpt_tasks[CPT_TASK_COUNT];
     cpt_job * job;
+
+    atomic_uint_fast8_t join_counter; // Used to determine join operations
+    // FreeRTOS notifications are more efficient than semaphores, but we use the latter for convenience
     SemaphoreHandle_t job_lock;  // Protects access to the shared resource (the job)
     SemaphoreHandle_t join_lock; // Synchronization to block the main thread until the job is completed
+
+    _Atomic TaskHandle_t join_handle; // Handle waiting to join
 } cpt_preempt;
 
 // Initializes all structures and tasks necessary to run the test. Tasks are suspended at creation and

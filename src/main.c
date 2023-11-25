@@ -132,7 +132,7 @@ void app_main() {
     cpt_preempt_init(&preempt, &job);
     cpt_preempt_run_job(&preempt);
 
-    log_system_status("Status after preemptinve initialization (not running yet)");
+    log_system_status("Status after preemptive initialization (not running yet)");
 
     ESP_LOGI(TAG, "Starting preemptive test");
 
