@@ -73,7 +73,7 @@ esp_err_t log_tasks()
     for (int i = 0; i < task_count; i ++)
     {
         percentage_run_time = (float)task_statuses[i].ulRunTimeCounter / total_run_time_float;
-        ESP_LOGD(TAG, "%-16s %6.2f%% %4d %16d",
+        ESP_LOGD(TAG, "%-16s %6.2f%% %4d %16lu",
             task_statuses[i].pcTaskName, 
             percentage_run_time,
             task_statuses[i].uxCurrentPriority,
