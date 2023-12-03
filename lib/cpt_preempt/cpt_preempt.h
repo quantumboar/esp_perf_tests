@@ -42,8 +42,8 @@ typedef struct
 {
     cpt_preempt_task cpt_tasks[CPT_TASK_COUNT];
     cpt_job * job;
-    xSemaphoreHandle job_lock;  // Protects access to the shared resource (the job)
-    xSemaphoreHandle join_lock; // Synchronization to block the main thread until the job is completed
+    SemaphoreHandle_t job_lock;  // Protects access to the shared resource (the job)
+    SemaphoreHandle_t join_lock; // Synchronization to block the main thread until the job is completed
 } cpt_preempt;
 
 // Initializes all structures and tasks necessary to run the test. Tasks are suspended at creation and
