@@ -27,7 +27,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define TAG "cpt_job"
 
-#define CPT_JOB_MAX_COUNT (1000000)
+#define CPT_JOB_MAX_COUNT (10000)
 
 esp_err_t cpt_job_init(cpt_job * job)
 {
