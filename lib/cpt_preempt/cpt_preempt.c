@@ -71,7 +71,7 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
     for (uint8_t i = 0; i < CPT_TASK_COUNT; i ++)
     {
         char task_name[configMAX_TASK_NAME_LEN];
-        if (snprintf(task_name, configMAX_TASK_NAME_LEN, "task_%u", i) < 0)
+        if (snprintf(task_name, configMAX_TASK_NAME_LEN, "task_%"PRIu8, i) < 0)
         {
             ESP_LOGE(TAG, "Task name is truncated");
         }
@@ -93,11 +93,13 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
 
 void cpt_preempt_uninit(cpt_preempt * preempt)
 {
+    ESP_LOGI(TAG, "uninitializing");
 
     for (int i = 0; i < CPT_TASK_COUNT; i ++)
     {
         if (preempt->cpt_tasks[i].handle != NULL)
         {
+            ESP_LOGD(TAG, "Deleting task %d", i);
             vTaskDelete(preempt->cpt_tasks[i].handle);
         }
     }
@@ -162,15 +164,23 @@ static void cpt_preempt_task_function(void * parameters)
     {
         xSemaphoreTake(preempt->job_lock, portMAX_DELAY);
         done = cpt_job_run(preempt->job) == CPT_JOB_DONE;
-        ESP_LOGD(TAG, "task: %u counter: %llu", task_index, preempt->job->counter);
         xSemaphoreGive(preempt->job_lock);
 
         // Doesn't need to be in the critical section as it's accessed by this task only
         preempt->cpt_tasks[task_index].counter ++;
+
+        // Job done, relinquish any remaining CPU to allow other threads to run
+        taskYIELD();
     }
 
     // signal that we're done
     cpt_preempt_signal_join(preempt);
+
+    // FreeRTOS tasks can't return, wait for deletion here
+    while (true)
+    {
+        taskYIELD();
+    }
 }
 
 esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
@@ -212,4 +222,13 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
     }
 
     return ESP_OK;
+}
+
+uint64_t cpt_preempt_get_job_counter(cpt_preempt * preempt)
+{
+    uint64_t ret = 0;
+    xSemaphoreTake(preempt->job_lock, portMAX_DELAY);
+    ret = preempt->job->counter;
+    xSemaphoreGive(preempt->job_lock);
+    return ret;
 }
