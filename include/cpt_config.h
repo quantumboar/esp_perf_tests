@@ -33,4 +33,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Parallel sub-fsms
 #define CPT_TASK_COUNT (2)
 
+// Iterations between which two job reports should occur 
+#define CPT_JOB_PROGRESS_REPORT_INTERVAL_MS (5000)
+
 #endif //__CPT_CONFIG_H__
