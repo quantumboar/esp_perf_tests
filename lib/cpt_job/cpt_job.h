@@ -36,7 +36,7 @@ typedef enum
 // it's oblivious of the number of tasks running it, or the synchronization mechanism.
 typedef struct
 {
-    unsigned long long counter;
+    uint64_t counter;
 } cpt_job;
 
 esp_err_t cpt_job_init(cpt_job * job);
