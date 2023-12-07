@@ -41,6 +41,13 @@ typedef struct
 
 esp_err_t cpt_job_init(cpt_job * job);
 void cpt_job_uninit(cpt_job * job);
+
+/// @brief  Runs an iteration of the job. Calling it after the job was completed has no effect. This function is *not* thread safe by design.
+/// @return the job status
 cpt_job_status cpt_job_run(cpt_job * job);
+
+/// @brief gets the job status
+/// @return the job status
+cpt_job_status cpt_job_get_status(cpt_job * job);
 
 #endif //__CPT_JOB_H__

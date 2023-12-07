@@ -23,6 +23,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <cpt_job.h>
 #include "esp_err.h"
+#include "esp_log.h"
+
+#define TAG "cpt_job"
 
 #define CPT_JOB_MAX_COUNT (1000000)
 
@@ -40,8 +43,19 @@ void cpt_job_uninit(cpt_job * job)
 // Function to be used to access the shared counter. It's *not* thread safe
 cpt_job_status cpt_job_run(cpt_job * job)
 {
-    if (job->counter < CPT_JOB_MAX_COUNT) {
+    if (cpt_job_get_status(job) == CPT_JOB_NOT_DONE)
+    {
         job->counter ++;
+        return CPT_JOB_NOT_DONE;
+    }
+
+    return CPT_JOB_DONE;
+}
+
+cpt_job_status cpt_job_get_status(cpt_job * job)
+{
+    if (job->counter < CPT_JOB_MAX_COUNT)
+    {
         return CPT_JOB_NOT_DONE;
     }
 
