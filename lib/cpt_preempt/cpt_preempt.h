@@ -69,4 +69,8 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt);
 /// @return ESP_OK in case of success, ESP_ERROR_TIMEOUT if the maximum time was reached or a different value in case of error
 esp_err_t cpt_preempt_wait_for_join(cpt_preempt * preempt, uint32_t max_wait_ms);
 
+/// @brief Provides an indication of the job progress
+/// @return the job progress as an absolute number
+uint64_t cpt_preempt_get_job_counter(cpt_preempt * preempt);
+
 #endif //__CPT_PREEMPT_H__
