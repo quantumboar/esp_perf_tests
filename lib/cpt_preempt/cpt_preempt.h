@@ -34,6 +34,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "cpt_config.h"
 #include "cpt_job.h"
 
+#define CPT_PREEMPT_WAIT_FOREVER (0)
+
 typedef struct
 {
     TaskHandle_t handle;
@@ -62,10 +64,9 @@ void cpt_preempt_uninit(cpt_preempt * test);
 // This call is not blocking
 esp_err_t cpt_preempt_run_job(cpt_preempt * preempt);
 
-// Waits for the job to complete for at most wait_ms milliseconds. This methid is useful if, for example,
-// the client wishes to periodically dump system stats while waiting for the job to complete.
-// @return ESP_ERR_TIMEOUT if wait_ms milliseconds lapsed without the job completing
-//         ESP_OK if the job was completed.
-esp_err_t cpt_preempt_wait_for_time(cpt_preempt * preempt, uint16_t wait_ms);
+/// @brief Blocks the caller task until the current job is terminated or timeout
+/// @param max_wait_us the maximum wait time in ms, CPT_PREEMPT_WAIT_FOREVER to never timeout
+/// @return ESP_OK in case of success, ESP_ERROR_TIMEOUT if the maximum time was reached or a different value in case of error
+esp_err_t cpt_preempt_wait_for_join(cpt_preempt * preempt, uint32_t max_wait_ms);
 
 #endif //__CPT_PREEMPT_H__

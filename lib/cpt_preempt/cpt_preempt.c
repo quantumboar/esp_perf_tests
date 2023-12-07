@@ -34,24 +34,26 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 static void cpt_preempt_task_function(void * parameters);
 
-// This implementation runs the specified job (of type cpt_job_t) concurrently, using threads and locks
-
-esp_err_t cpt_preempt_wait_for_join(cpt_preempt * preempt)
+esp_err_t cpt_preempt_wait_for_join(cpt_preempt * preempt, uint32_t max_wait_ms)
 {
     TaskHandle_t current_task_handle = xTaskGetCurrentTaskHandle();
     TaskHandle_t null_task_handle = NULL;
     bool valid = atomic_compare_exchange_strong(&preempt->join_handle, &null_task_handle, current_task_handle);
     ESP_RETURN_ON_FALSE(valid, ESP_ERR_INVALID_STATE, TAG, "Handle already set");
 
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    uint32_t notification_value = ulTaskNotifyTake(pdTRUE, max_wait_ms == CPT_PREEMPT_WAIT_FOREVER ? portMAX_DELAY : pdMS_TO_TICKS(max_wait_ms));
     atomic_compare_exchange_strong(&preempt->join_handle, &current_task_handle, NULL);
 
-    return ESP_OK;
+    return notification_value == 0 ? ESP_ERR_TIMEOUT : ESP_OK;
 }
 
+/// @brief signals that the job is completed. If a task was blocked via cpt_preempt_wait_for_join, it will be unblocked
+/// @return ESP_OK in case of success, a different value in case of error
 static inline esp_err_t cpt_preempt_signal_join(cpt_preempt * preempt)
 {
-    xTaskNotifyGive(atomic_load(&preempt->join_handle));
+    BaseType_t max_woken_thread_priority = 1;
+    // Use the fromISR variant to avoid blocking the calling thread
+    vTaskNotifyGiveFromISR(atomic_load(&preempt->join_handle), &max_woken_thread_priority);
     return ESP_OK;
 }
 
@@ -78,7 +80,7 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
         ESP_GOTO_ON_FALSE(task_create_ret == pdPASS, ESP_ERR_INVALID_STATE, exit, TAG, "Unable to create task");
     }
 
-    ESP_LOGD(TAG, "====> Tasks initialized");
+    ESP_LOGI(TAG, "Tasks initialized");
 
     exit:
     if (ret != ESP_OK)
@@ -144,84 +146,70 @@ static void cpt_preempt_task_function(void * parameters)
         return;
     }
 
-    ESP_LOGD(TAG, "====> task %d", task_index);
-
     if (atomic_fetch_add(&preempt->join_counter, 1) == CPT_TASK_COUNT - 1)
     {
-        ESP_LOGD(TAG, "====> all tasks initialized, signaling..");
         cpt_preempt_signal_join(preempt);
-        ESP_LOGD(TAG, "====> signaled");
     }
 
     // Suspend the current task. It will be resumed by a call to start()
     // There is a non-zero time interval between the fetch-add above and when the task is suspended, so 
     // the obj_run method will have to poll for the tread state and spin for a while
-    ESP_LOGD(TAG, "====> suspending task %d", task_index);
+    ESP_LOGD(TAG, "suspending task %d, waiting for start", task_index);
     vTaskSuspend(NULL);
+    ESP_LOGD(TAG, "task %d resumed", task_index);
 
     while (! done)
     {
         xSemaphoreTake(preempt->job_lock, portMAX_DELAY);
         done = cpt_job_run(preempt->job) == CPT_JOB_DONE;
+        ESP_LOGD(TAG, "task: %u counter: %llu", task_index, preempt->job->counter);
         xSemaphoreGive(preempt->job_lock);
 
         // Doesn't need to be in the critical section as it's accessed by this task only
         preempt->cpt_tasks[task_index].counter ++;
     }
+
+    // signal that we're done
+    cpt_preempt_signal_join(preempt);
 }
 
 esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
 {
     ESP_LOGI(TAG, "Starting job");
 
-    ESP_LOGD(TAG, "====> Waiting on join");
-    cpt_preempt_wait_for_join(preempt);
-    ESP_LOGD(TAG, "====> Joined");
+    // Here we wait until all tasks are initialized (the last task that's initialized will signal then suspend itself)
+    cpt_preempt_wait_for_join(preempt, CPT_PREEMPT_WAIT_FOREVER);
 
     bool do_spin = true;
 
-    // This should spin for a short time only
+    // This should spin for a short time only, to avoid a race with the last task suspending itself
     while (do_spin)
     {
         do_spin = false;
-
-        taskYIELD();
-
-        ESP_LOGD(TAG, "====> Initialized count: %u", atomic_load(&preempt->join_counter));
 
         for (int i = 0; i < CPT_TASK_COUNT; i ++)
         {
             TaskStatus_t task_status;
             vTaskGetInfo(preempt->cpt_tasks[i].handle, &task_status, pdFALSE, eInvalid);
-            ESP_LOGD(TAG, "====> Thread:%s state: %d", task_status.pcTaskName, task_status.eCurrentState);
             if (task_status.eCurrentState != eSuspended) {
                 do_spin = true;
                 break;
             }
         }
+
+        if (do_spin)
+        {
+            taskYIELD();
+        }
     }
 
-    ESP_LOGD(TAG, "====> all tasks suspended, proceeding");
+    ESP_LOGI(TAG, "all tasks suspended, proceeding");
 
+    // Now resume all tasks. Time measurement should begin here
     for (uint8_t i = 0; i < CPT_TASK_COUNT; i ++)
     {
-        ESP_RETURN_ON_FALSE(preempt->cpt_tasks[i].handle != NULL, ESP_ERR_INVALID_STATE, TAG, "Invalid thread handler");
         vTaskResume(preempt->cpt_tasks[i].handle);
     }
-
-    return ESP_OK;
-}
-
-esp_err_t cpt_preempt_wait_for_time(cpt_preempt * preempt, uint16_t wait_ms)
-{
-    // TODO: signal wait should come with a max time
-
-    // if (xSemaphoreTake(preempt->join_lock, portTICK_PERIOD_MS * wait_ms) == pdFALSE)
-    // {
-    //     return ESP_ERR_TIMEOUT;
-    // }
-
-    // xSemaphoreGive(preempt->join_lock);
 
     return ESP_OK;
 }
