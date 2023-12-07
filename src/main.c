@@ -110,7 +110,7 @@ esp_err_t log_system_status(const char * text)
     esp_err_t ret = ESP_OK;
 
     ESP_LOGD(TAG, "====== %s ======", text);
-    ESP_LOGD(TAG, "Time lapsed since last status: %llu ms\n", current_time_ms - last_time_ms);
+    ESP_LOGD(TAG, "Time lapsed since last status: %"PRIu64" ms\n", current_time_ms - last_time_ms);
     ret = log_tasks();
     ESP_LOGD(TAG,"");
     log_memory();
@@ -136,9 +136,10 @@ void app_main() {
 
     ESP_LOGI(TAG, "Starting preemptive test");
 
-    while(cpt_preempt_wait_for_join(&preempt, 1000) == ESP_ERR_TIMEOUT)
+    while(cpt_preempt_wait_for_join(&preempt, CPT_JOB_PROGRESS_REPORT_INTERVAL_MS) == ESP_ERR_TIMEOUT)
     {
-        log_memory();
+        log_system_status("Status while running");
+        ESP_LOGI(TAG, "job counter: %"PRIu64, cpt_preempt_get_job_counter(&preempt));
     }
 
     log_system_status("Preemptive test done, return value:");
