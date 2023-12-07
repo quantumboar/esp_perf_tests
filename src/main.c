@@ -136,14 +136,14 @@ void app_main() {
 
     ESP_LOGI(TAG, "Starting preemptive test");
 
-    while(ret == ESP_ERR_TIMEOUT)
+    while(cpt_preempt_wait_for_join(&preempt, 1000) == ESP_ERR_TIMEOUT)
     {
-        ret = cpt_preempt_wait_for_time(&preempt, 1000);
         log_memory();
     }
 
-    log_system_status("Preemptive test done");
+    log_system_status("Preemptive test done, return value:");
     cpt_preempt_uninit(&preempt);
+    ESP_LOGI(TAG, "return status: %s", esp_err_to_name(ret));
 
     // Reset job
     cpt_job_uninit(&job);
