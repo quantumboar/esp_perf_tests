@@ -34,27 +34,62 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 static void cpt_preempt_task_function(void * parameters);
 
-esp_err_t cpt_preempt_wait_for_join(cpt_preempt * preempt, uint32_t max_wait_ms)
+/// @brief change the state for this object and notify waiting task (if set)
+/// @details If set, the task pending for state changes will be unblocked
+/// @param new_state the state to set this cpt_preempt object to
+/// @return esp_ok in case of success
+static esp_err_t cpt_preempt_set_state(cpt_preempt *preempt, cpt_preempt_state new_state)
 {
-    TaskHandle_t current_task_handle = xTaskGetCurrentTaskHandle();
-    TaskHandle_t null_task_handle = NULL;
-    bool valid = atomic_compare_exchange_strong(&preempt->join_handle, &null_task_handle, current_task_handle);
-    ESP_RETURN_ON_FALSE(valid, ESP_ERR_INVALID_STATE, TAG, "Handle already set");
+    ESP_LOGI(TAG, "Changing state from %d to %d", atomic_load(&preempt->state), new_state);
+    // Set the state first
+    atomic_store(&preempt->state, new_state);
 
-    uint32_t notification_value = ulTaskNotifyTake(pdTRUE, max_wait_ms == CPT_PREEMPT_WAIT_FOREVER ? portMAX_DELAY : pdMS_TO_TICKS(max_wait_ms));
-    atomic_compare_exchange_strong(&preempt->join_handle, &current_task_handle, NULL);
+    // Then read the handle
+    volatile TaskHandle_t waiting_task_handle = atomic_load(&preempt->waiting_task_handle);
 
-    return notification_value == 0 ? ESP_ERR_TIMEOUT : ESP_OK;
+    if (waiting_task_handle != NULL)
+    {
+        ESP_LOGD(TAG, "Notify pending task");
+        xTaskNotifyGive(waiting_task_handle);
+    } else
+    {
+        ESP_LOGW(TAG, "No task to notify");
+    }
+
+    return ESP_OK;
 }
 
-/// @brief signals that the job is completed. If a task was blocked via cpt_preempt_wait_for_join, it will be unblocked
-/// @return ESP_OK in case of success, a different value in case of error
-static inline esp_err_t cpt_preempt_signal_join(cpt_preempt * preempt)
+esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_wait_ms, cpt_preempt_state expected_state)
 {
-    BaseType_t max_woken_thread_priority = 1;
-    // Use the fromISR variant to avoid blocking the calling thread
-    vTaskNotifyGiveFromISR(atomic_load(&preempt->join_handle), &max_woken_thread_priority);
-    return ESP_OK;
+    TaskHandle_t this_task_handle = xTaskGetCurrentTaskHandle();
+    TaskHandle_t null_task_handle = NULL;
+    volatile cpt_preempt_state current_state = CPT_PREEMPT_STATE_NONE;
+    uint32_t notification_value = 0;
+
+    ESP_LOGD(TAG, "Task %p waiting for state %d", this_task_handle, expected_state);
+
+    // Set the wait handle first
+    bool valid = atomic_compare_exchange_strong(&preempt->waiting_task_handle, &null_task_handle, this_task_handle);
+    ESP_RETURN_ON_FALSE(valid, ESP_ERR_INVALID_STATE, TAG, "Handle already set");
+
+    while (current_state != expected_state)
+    {
+        // Read the state after setting the handle: this fixes races
+        current_state = atomic_load(&preempt->state);
+
+        if (current_state != expected_state)
+        {
+            // Block here
+            ESP_LOGD(TAG, "State %d does not match expected %d, waiting", current_state, expected_state);
+            notification_value = ulTaskNotifyTake(pdTRUE, max_wait_ms == CPT_PREEMPT_WAIT_FOREVER ? portMAX_DELAY : pdMS_TO_TICKS(max_wait_ms));
+        }
+    }
+
+    ESP_LOGD(TAG, "Task %p unblocked", this_task_handle);
+
+    atomic_store(&preempt->waiting_task_handle, NULL);
+
+    return notification_value == 0 ? ESP_ERR_TIMEOUT : ESP_OK;
 }
 
 esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
@@ -67,6 +102,8 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
     ESP_GOTO_ON_FALSE(preempt->job_lock != NULL, ESP_ERR_INVALID_STATE, exit, TAG, "Unable to create semaphore");
 
     BaseType_t task_create_ret = 0;
+    ret = cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_INITIALIZING);
+    ESP_GOTO_ON_ERROR(ret, exit, TAG, "Error setting state: %s", esp_err_to_name(ret));
 
     for (uint8_t i = 0; i < CPT_TASK_COUNT; i ++)
     {
@@ -76,7 +113,7 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
             ESP_LOGE(TAG, "Task name is truncated");
         }
 
-        task_create_ret = xTaskCreatePinnedToCore(cpt_preempt_task_function, task_name, CPT_TASKS_STACK_SIZE, (void *)preempt, tskIDLE_PRIORITY, &preempt->cpt_tasks[i].handle, 0);
+        task_create_ret = xTaskCreatePinnedToCore(cpt_preempt_task_function, task_name, CPT_TASKS_STACK_SIZE, (void *)preempt, 1, &preempt->cpt_tasks[i].handle, 0);
         ESP_GOTO_ON_FALSE(task_create_ret == pdPASS, ESP_ERR_INVALID_STATE, exit, TAG, "Unable to create task");
     }
 
@@ -148,9 +185,9 @@ static void cpt_preempt_task_function(void * parameters)
         return;
     }
 
-    if (atomic_fetch_add(&preempt->join_counter, 1) == CPT_TASK_COUNT - 1)
+    if (atomic_fetch_add(&preempt->initialized_tasks_count, 1) == CPT_TASK_COUNT - 1)
     {
-        cpt_preempt_signal_join(preempt);
+        cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_INITIALIZED);
     }
 
     // Suspend the current task. It will be resumed by a call to start()
@@ -174,7 +211,7 @@ static void cpt_preempt_task_function(void * parameters)
     }
 
     // signal that we're done
-    cpt_preempt_signal_join(preempt);
+    cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_DONE);
 
     // FreeRTOS tasks can't return, wait for deletion here
     while (true)
@@ -188,7 +225,7 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
     ESP_LOGI(TAG, "Starting job");
 
     // Here we wait until all tasks are initialized (the last task that's initialized will signal then suspend itself)
-    cpt_preempt_wait_for_join(preempt, CPT_PREEMPT_WAIT_FOREVER);
+    cpt_preempt_wait_for_state_change(preempt, CPT_PREEMPT_WAIT_FOREVER, CPT_PREEMPT_STATE_INITIALIZED);
 
     bool do_spin = true;
 
@@ -213,7 +250,7 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
         }
     }
 
-    ESP_LOGI(TAG, "all tasks suspended, proceeding");
+    cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_RUNNING);
 
     // Now resume all tasks. Time measurement should begin here
     for (uint8_t i = 0; i < CPT_TASK_COUNT; i ++)
