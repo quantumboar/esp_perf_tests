@@ -136,7 +136,7 @@ void app_main() {
 
     ESP_LOGI(TAG, "Starting preemptive test");
 
-    while(cpt_preempt_wait_for_join(&preempt, CPT_JOB_PROGRESS_REPORT_INTERVAL_MS) == ESP_ERR_TIMEOUT)
+    while(cpt_preempt_wait_for_state_change(&preempt, CPT_JOB_PROGRESS_REPORT_INTERVAL_MS, CPT_PREEMPT_STATE_DONE) == ESP_ERR_TIMEOUT)
     {
         log_system_status("Status while running");
         ESP_LOGI(TAG, "job counter: %"PRIu64, cpt_preempt_get_job_counter(&preempt));
