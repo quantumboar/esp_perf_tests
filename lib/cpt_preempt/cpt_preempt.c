@@ -40,7 +40,7 @@ static void cpt_preempt_task_function(void * parameters);
 /// @return esp_ok in case of success
 static esp_err_t cpt_preempt_set_state(cpt_preempt *preempt, cpt_preempt_state new_state)
 {
-    ESP_LOGI(TAG, "Changing state from %d to %d", atomic_load(&preempt->state), new_state);
+    ESP_LOGD(TAG, "Changing state from %d to %d", atomic_load(&preempt->state), new_state);
     // Set the state first
     atomic_store(&preempt->state, new_state);
 
@@ -66,8 +66,6 @@ esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_
     volatile cpt_preempt_state current_state = CPT_PREEMPT_STATE_NONE;
     uint32_t notification_value = 0;
 
-    ESP_LOGD(TAG, "Task %p waiting for state %d", this_task_handle, expected_state);
-
     // Set the wait handle first
     bool valid = atomic_compare_exchange_strong(&preempt->waiting_task_handle, &null_task_handle, this_task_handle);
     ESP_RETURN_ON_FALSE(valid, ESP_ERR_INVALID_STATE, TAG, "Handle already set");
@@ -80,12 +78,13 @@ esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_
         if (current_state != expected_state)
         {
             // Block here
-            ESP_LOGD(TAG, "State %d does not match expected %d, waiting", current_state, expected_state);
             notification_value = ulTaskNotifyTake(pdTRUE, max_wait_ms == CPT_PREEMPT_WAIT_FOREVER ? portMAX_DELAY : pdMS_TO_TICKS(max_wait_ms));
+            if (notification_value == 0)
+            {
+                break;
+            }
         }
     }
-
-    ESP_LOGD(TAG, "Task %p unblocked", this_task_handle);
 
     atomic_store(&preempt->waiting_task_handle, NULL);
 
