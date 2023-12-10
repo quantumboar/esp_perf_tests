@@ -104,7 +104,7 @@ esp_err_t log_system_status(const char * text)
 
     if (last_time_ms == 0)
     {
-        last_time_ms = get_current_time_ms();
+        last_time_ms = current_time_ms;
     }
 
     esp_err_t ret = ESP_OK;
@@ -116,6 +116,7 @@ esp_err_t log_system_status(const char * text)
     log_memory();
     ESP_LOGD(TAG,"");
 
+    last_time_ms = current_time_ms;
     return ret;
 }
 
