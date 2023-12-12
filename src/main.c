@@ -36,7 +36,8 @@ void log_memory()
     multi_heap_info_t heap_info = (multi_heap_info_t) {0};
     heap_caps_get_info(&heap_info, 0); // 0 matches all heaps, stats will be totalled across them
 
-    ESP_LOGD(TAG, "Memory stats, current free: %d minimum free: %d current allocated: %d",
+    ESP_LOGI(TAG, "==== Memory stats ====");
+    ESP_LOGI(TAG, "urrent free: %d minimum free: %d current allocated: %d",
         heap_info.total_free_bytes,
         heap_info.minimum_free_bytes,
         heap_info.total_allocated_bytes);
@@ -51,7 +52,8 @@ esp_err_t log_tasks()
     esp_err_t ret = ESP_OK;
 
     task_count = uxTaskGetNumberOfTasks();
-    ESP_LOGD(TAG, "Tasks stats, %d tasks in system", task_count);
+    ESP_LOGI(TAG, "==== Tasks stats ====");
+    ESP_LOGI(TAG, "%d tasks in system", task_count);
     ESP_GOTO_ON_FALSE(task_count > 0, ESP_ERR_INVALID_STATE, exit, TAG, "No tasks in system");
 
     task_statuses = pvPortMalloc(task_count * sizeof(TaskStatus_t));
@@ -67,13 +69,14 @@ esp_err_t log_tasks()
 
     total_run_time_float = (float)total_run_time / 100;
 
-    ESP_LOGD(TAG, "Name           CPU usage Prio Stack high water");
-    ESP_LOGD(TAG, "----           --------- ---- ----------------");
+    ESP_LOGI(TAG, "-------------- --------- ---- ----------------");
+    ESP_LOGI(TAG, "Name           CPU usage Prio Stack high water");
+    ESP_LOGI(TAG, "-------------- --------- ---- ----------------");
 
     for (int i = 0; i < task_count; i ++)
     {
         percentage_run_time = (float)task_statuses[i].ulRunTimeCounter / total_run_time_float;
-        ESP_LOGD(TAG, "%-16s %6.2f%% %4d %16lu",
+        ESP_LOGI(TAG, "%-16s %6.2f%% %4d %16lu",
             task_statuses[i].pcTaskName, 
             percentage_run_time,
             task_statuses[i].uxCurrentPriority,
@@ -99,24 +102,14 @@ static inline uint64_t get_current_time_ms()
 // Logs the system status together with an informative tag
 esp_err_t log_system_status(const char * text)
 {
-    static uint64_t last_time_ms = 0;
-    uint64_t current_time_ms = get_current_time_ms();
-
-    if (last_time_ms == 0)
-    {
-        last_time_ms = current_time_ms;
-    }
-
     esp_err_t ret = ESP_OK;
 
-    ESP_LOGD(TAG, "====== %s ======", text);
-    ESP_LOGD(TAG, "Time lapsed since last status: %"PRIu64" ms\n", current_time_ms - last_time_ms);
+    ESP_LOGI(TAG, "====== %s ======", text);
     ret = log_tasks();
-    ESP_LOGD(TAG,"");
+    ESP_LOGI(TAG,"");
     log_memory();
-    ESP_LOGD(TAG,"");
+    ESP_LOGI(TAG,"");
 
-    last_time_ms = current_time_ms;
     return ret;
 }
 
@@ -126,24 +119,27 @@ void app_main() {
     cpt_coop coop;
     esp_err_t ret = ESP_ERR_TIMEOUT;
 
+#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
     log_system_status("Initial status");
+#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
 
     // Preemptive test
     cpt_job_init(&job);
     cpt_preempt_init(&preempt, &job);
     cpt_preempt_run_job(&preempt);
 
-    log_system_status("Status after preemptive initialization (not running yet)");
+#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
+    log_system_status("Status prior starting preemptive test");
+#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
 
     ESP_LOGI(TAG, "Starting preemptive test");
 
-    while(cpt_preempt_wait_for_state_change(&preempt, CPT_JOB_PROGRESS_REPORT_INTERVAL_MS, CPT_PREEMPT_STATE_DONE) == ESP_ERR_TIMEOUT)
-    {
-        log_system_status("Status while running");
-        ESP_LOGI(TAG, "job counter: %"PRIu64, cpt_preempt_get_job_counter(&preempt));
-    }
+    uint64_t start_time = get_current_time_ms();
+    ret = cpt_preempt_wait_for_state_change(&preempt, CPT_PREEMPT_WAIT_FOREVER, CPT_PREEMPT_STATE_DONE);
+    uint64_t duration_ms = get_current_time_ms() - start_time;
 
-    log_system_status("Preemptive test done, return value:");
+    log_system_status("Test completed");
+    ESP_LOGI(TAG, "Preemptive test done, return value: %s duration: %"PRIu64" ms", esp_err_to_name(ret), duration_ms);
     cpt_preempt_uninit(&preempt);
     ESP_LOGI(TAG, "return status: %s", esp_err_to_name(ret));
 
@@ -152,7 +148,9 @@ void app_main() {
     cpt_job_init(&job);
     ret = ESP_ERR_TIMEOUT;
 
+#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
     log_system_status("Status prior initializing cooperative test");
+#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
 
     cpt_coop_init(&coop, &job);
     cpt_coop_run_job(&coop);
@@ -167,5 +165,7 @@ void app_main() {
     cpt_coop_uninit(&coop);
     cpt_job_uninit(&job);
 
+#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
     log_system_status("Test completed");
+#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
 }
