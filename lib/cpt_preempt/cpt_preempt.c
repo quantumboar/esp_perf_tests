@@ -47,13 +47,10 @@ static esp_err_t cpt_preempt_set_state(cpt_preempt *preempt, cpt_preempt_state n
     // Then read the handle
     volatile TaskHandle_t waiting_task_handle = atomic_load(&preempt->waiting_task_handle);
 
+    // Notify task if necessary
     if (waiting_task_handle != NULL)
     {
-        ESP_LOGD(TAG, "Notify pending task");
         xTaskNotifyGive(waiting_task_handle);
-    } else
-    {
-        ESP_LOGW(TAG, "No task to notify");
     }
 
     return ESP_OK;
@@ -104,16 +101,24 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
     ret = cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_INITIALIZING);
     ESP_GOTO_ON_ERROR(ret, exit, TAG, "Error setting state: %s", esp_err_to_name(ret));
 
-    for (uint8_t i = 0; i < CPT_TASK_COUNT; i ++)
+    for (uint8_t task_index = 0; task_index < CPT_TASK_COUNT; task_index ++)
     {
         char task_name[configMAX_TASK_NAME_LEN];
-        if (snprintf(task_name, configMAX_TASK_NAME_LEN, "task_%"PRIu8, i) < 0)
+        if (snprintf(task_name, configMAX_TASK_NAME_LEN, "task_%"PRIu8, task_index) < 0)
         {
             ESP_LOGE(TAG, "Task name is truncated");
         }
 
-        task_create_ret = xTaskCreatePinnedToCore(cpt_preempt_task_function, task_name, CPT_TASKS_STACK_SIZE, (void *)preempt, 1, &preempt->cpt_tasks[i].handle, 0);
-        ESP_GOTO_ON_FALSE(task_create_ret == pdPASS, ESP_ERR_INVALID_STATE, exit, TAG, "Unable to create task");
+        task_create_ret = xTaskCreatePinnedToCore(
+            cpt_preempt_task_function,                    // task function
+            task_name,                                    // task name
+            CPT_TASKS_STACK_SIZE,                         // stack size
+            (void *)preempt,                              // context passed to task function
+            CPT_PREEMPT_TASK_PRIO,                        // task priority
+            &preempt->cpt_tasks[task_index].handle,       // task handle (output parameter)
+            CPT_PREEMPT_ENABLE_MULTI_CORE ? task_index % 2 : 0); // core
+    
+        ESP_GOTO_ON_FALSE(task_create_ret == pdPASS, ESP_ERR_INVALID_STATE, exit, TAG, "Unable to create task index %d", task_index);
     }
 
     ESP_LOGI(TAG, "Tasks initialized");

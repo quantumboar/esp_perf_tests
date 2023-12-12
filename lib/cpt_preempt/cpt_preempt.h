@@ -34,7 +34,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "cpt_config.h"
 #include "cpt_job.h"
 
+// 1 is the same priority as main. It allows for full CPU utilization
+#define CPT_PREEMPT_TASK_PRIO (1)
+
+// Use this in cpt_preempt_wait_for_state_change to deisable timeout
 #define CPT_PREEMPT_WAIT_FOREVER (0)
+
+// Distribute tasks across cores (evenly split)
+#define CPT_PREEMPT_ENABLE_MULTI_CORE (1)
 
 /// @brief Structure handling a task in the preemptive test
 typedef struct
