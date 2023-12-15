@@ -21,8 +21,8 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#ifndef __CPT_CONFIG_H__
-#define __CPT_CONFIG_H__
+#ifndef __CPT_GLOBALS_H__
+#define __CPT_GLOBALS_H__
 
 // Global defines for running the performance test. They're placed here rather than using
 // -D options in platformio.ini 'cause doing the latter always results into a tedious
@@ -33,8 +33,34 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // Parallel sub-fsms
 #define CPT_TASK_COUNT (2)
 
-
-// Report systm status more often if set to 0
+// Report system status more often if set to 0
 #define CPT_FREQUENT_SYSTEM_STATUS_REPORT (0)
 
-#endif //__CPT_CONFIG_H__
+// Test to use (preemptive or cooperative)
+#define cpt_type cpt_preempt
+
+// No need to edit these (they're used to generate the symbols to use for the test)
+#define __METHOD(type, method) type ## _ ## method
+#define METHOD(...) __METHOD(__VA_ARGS__)
+
+// Compile-time solution for class abstraction
+#define cpt_init METHOD(cpt_type, init)
+#define cpt_uninit METHOD(cpt_type, uninit)
+#define cpt_run_job METHOD(cpt_type, run_job)
+#define cpt_wait_for_state_change METHOD(cpt_type, wait_for_state_change)
+
+// Use this in *_wait_for_state_change to disable timeout
+#define CPT_WAIT_FOREVER (0)
+
+/// @brief test state, useful for state signal handling
+typedef enum
+{
+    CPT_STATE_NONE = 0,
+    CPT_STATE_INITIALIZING,
+    CPT_STATE_INITIALIZED,
+    CPT_STATE_RUNNING,
+    CPT_STATE_DONE,
+    CPT_STATE_COUNT
+} cpt_state;
+
+#endif //__CPT_GLOBALS_H__

@@ -31,14 +31,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "esp_log.h"
 #include "stdatomic.h"
 
-#include "cpt_config.h"
+#include "cpt_globals.h"
 #include "cpt_job.h"
 
 // 1 is the same priority as main. It allows for full CPU utilization
 #define CPT_PREEMPT_TASK_PRIO (1)
-
-// Use this in cpt_preempt_wait_for_state_change to deisable timeout
-#define CPT_PREEMPT_WAIT_FOREVER (0)
 
 // Distribute tasks across cores (evenly split)
 #define CPT_PREEMPT_ENABLE_MULTI_CORE (1)
@@ -50,17 +47,6 @@ typedef struct
     unsigned long counter;  // Counts how many times this task had a chance to run a job
 } cpt_preempt_task;
 
-/// @brief  Preeventive test state, useful for state signal handling
-typedef enum
-{
-    CPT_PREEMPT_STATE_NONE = 0,
-    CPT_PREEMPT_STATE_INITIALIZING,
-    CPT_PREEMPT_STATE_INITIALIZED,
-    CPT_PREEMPT_STATE_RUNNING,
-    CPT_PREEMPT_STATE_DONE,
-    CPT_PREEMPT_STATE_COUNT
-} cpt_preempt_state;
-
 /// @brief Structure holding state for a preemoption test
 typedef struct
 {
@@ -71,7 +57,7 @@ typedef struct
 
     SemaphoreHandle_t job_lock;  // Protects access to the shared resource (the job)
 
-    volatile _Atomic cpt_preempt_state state; // The state of this preempt object
+    volatile _Atomic cpt_state state; // The state of this preempt object
     // An event is generated at each significant state change. Currently when the preempt object threads all are initialized, and when the job is completed.
     volatile _Atomic TaskHandle_t waiting_task_handle; // Handle for a task waiting for the next event
 } cpt_preempt;
@@ -92,10 +78,6 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt);
 /// @param max_wait_us the maximum wait time in ms, CPT_PREEMPT_WAIT_FOREVER to never timeout
 /// @param state the state to wait for
 /// @return ESP_OK in case of success, ESP_ERROR_TIMEOUT if the maximum time was reached.
-esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_wait_ms, cpt_preempt_state state);
-
-/// @brief Provides an indication of the job progress
-/// @return the job progress as an absolute number
-uint64_t cpt_preempt_get_job_counter(cpt_preempt * preempt);
+esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_wait_ms, cpt_state state);
 
 #endif //__CPT_PREEMPT_H__

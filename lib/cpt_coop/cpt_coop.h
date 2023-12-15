@@ -24,7 +24,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __CPT_COOP_H__
 #define __CPT_COOP_H__
 
-#include "cpt_config.h"
+#include "cpt_globals.h"
 #include "cpt_job.h"
 
 typedef enum

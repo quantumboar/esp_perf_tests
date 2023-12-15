@@ -21,7 +21,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#include "cpt_config.h"
+#include "cpt_globals.h"
 #include "cpt_preempt.h"
 #include "esp_check.h"
 
@@ -38,7 +38,7 @@ static void cpt_preempt_task_function(void * parameters);
 /// @details If set, the task pending for state changes will be unblocked
 /// @param new_state the state to set this cpt_preempt object to
 /// @return esp_ok in case of success
-static esp_err_t cpt_preempt_set_state(cpt_preempt *preempt, cpt_preempt_state new_state)
+static esp_err_t cpt_preempt_set_state(cpt_preempt *preempt, cpt_state new_state)
 {
     ESP_LOGD(TAG, "Changing state from %d to %d", atomic_load(&preempt->state), new_state);
     // Set the state first
@@ -56,11 +56,11 @@ static esp_err_t cpt_preempt_set_state(cpt_preempt *preempt, cpt_preempt_state n
     return ESP_OK;
 }
 
-esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_wait_ms, cpt_preempt_state expected_state)
+esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_wait_ms, cpt_state expected_state)
 {
     TaskHandle_t this_task_handle = xTaskGetCurrentTaskHandle();
     TaskHandle_t null_task_handle = NULL;
-    volatile cpt_preempt_state current_state = CPT_PREEMPT_STATE_NONE;
+    volatile cpt_state current_state = CPT_STATE_NONE;
     uint32_t notification_value = 0;
 
     // Set the wait handle first
@@ -75,7 +75,7 @@ esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_
         if (current_state != expected_state)
         {
             // Block here
-            notification_value = ulTaskNotifyTake(pdTRUE, max_wait_ms == CPT_PREEMPT_WAIT_FOREVER ? portMAX_DELAY : pdMS_TO_TICKS(max_wait_ms));
+            notification_value = ulTaskNotifyTake(pdTRUE, max_wait_ms == CPT_WAIT_FOREVER ? portMAX_DELAY : pdMS_TO_TICKS(max_wait_ms));
             if (notification_value == 0)
             {
                 break;
@@ -98,7 +98,7 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
     ESP_GOTO_ON_FALSE(preempt->job_lock != NULL, ESP_ERR_INVALID_STATE, exit, TAG, "Unable to create semaphore");
 
     BaseType_t task_create_ret = 0;
-    ret = cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_INITIALIZING);
+    ret = cpt_preempt_set_state(preempt, CPT_STATE_INITIALIZING);
     ESP_GOTO_ON_ERROR(ret, exit, TAG, "Error setting state: %s", esp_err_to_name(ret));
 
     for (uint8_t task_index = 0; task_index < CPT_TASK_COUNT; task_index ++)
@@ -191,7 +191,7 @@ static void cpt_preempt_task_function(void * parameters)
 
     if (atomic_fetch_add(&preempt->initialized_tasks_count, 1) == CPT_TASK_COUNT - 1)
     {
-        cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_INITIALIZED);
+        cpt_preempt_set_state(preempt, CPT_STATE_INITIALIZED);
     }
 
     // Suspend the current task. It will be resumed by a call to start()
@@ -215,7 +215,7 @@ static void cpt_preempt_task_function(void * parameters)
     }
 
     // signal that we're done
-    cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_DONE);
+    cpt_preempt_set_state(preempt, CPT_STATE_DONE);
 
     // FreeRTOS tasks can't return, wait for deletion here
     while (true)
@@ -229,7 +229,7 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
     ESP_LOGI(TAG, "Starting job");
 
     // Here we wait until all tasks are initialized (the last task that's initialized will signal then suspend itself)
-    cpt_preempt_wait_for_state_change(preempt, CPT_PREEMPT_WAIT_FOREVER, CPT_PREEMPT_STATE_INITIALIZED);
+    cpt_preempt_wait_for_state_change(preempt, CPT_WAIT_FOREVER, CPT_STATE_INITIALIZED);
 
     bool do_spin = true;
 
@@ -254,7 +254,7 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
         }
     }
 
-    cpt_preempt_set_state(preempt, CPT_PREEMPT_STATE_RUNNING);
+    cpt_preempt_set_state(preempt, CPT_STATE_RUNNING);
 
     // Now resume all tasks. Time measurement should begin here
     for (uint8_t i = 0; i < CPT_TASK_COUNT; i ++)
@@ -263,13 +263,4 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
     }
 
     return ESP_OK;
-}
-
-uint64_t cpt_preempt_get_job_counter(cpt_preempt * preempt)
-{
-    uint64_t ret = 0;
-    xSemaphoreTake(preempt->job_lock, portMAX_DELAY);
-    ret = preempt->job->counter;
-    xSemaphoreGive(preempt->job_lock);
-    return ret;
 }

@@ -115,7 +115,7 @@ esp_err_t log_system_status(const char * text)
 
 void app_main() {
     cpt_job job;
-    cpt_preempt preempt;
+    cpt_type test;
     cpt_coop coop;
     esp_err_t ret = ESP_ERR_TIMEOUT;
 
@@ -123,49 +123,24 @@ void app_main() {
     log_system_status("Initial status");
 #endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
 
-    // Preemptive test
     cpt_job_init(&job);
-    cpt_preempt_init(&preempt, &job);
-    cpt_preempt_run_job(&preempt);
+    cpt_init(&test, &job);
+    cpt_run_job(&test);
 
 #if CPT_FREQUENT_SYSTEM_STATUS_REPORT
-    log_system_status("Status prior starting preemptive test");
+    log_system_status("Status prior starting test");
 #endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
 
-    ESP_LOGI(TAG, "Starting preemptive test");
+    ESP_LOGI(TAG, "Starting test");
 
     uint64_t start_time = get_current_time_ms();
-    ret = cpt_preempt_wait_for_state_change(&preempt, CPT_PREEMPT_WAIT_FOREVER, CPT_PREEMPT_STATE_DONE);
+    ret = cpt_wait_for_state_change(&test, CPT_WAIT_FOREVER, CPT_STATE_DONE);
     uint64_t duration_ms = get_current_time_ms() - start_time;
 
     log_system_status("Test completed");
-    ESP_LOGI(TAG, "Preemptive test done, return value: %s duration: %"PRIu64" ms", esp_err_to_name(ret), duration_ms);
-    cpt_preempt_uninit(&preempt);
+    ESP_LOGI(TAG, "return value: %s duration: %"PRIu64" ms", esp_err_to_name(ret), duration_ms);
+    cpt_uninit(&test);
     ESP_LOGI(TAG, "return status: %s", esp_err_to_name(ret));
 
-    // Reset job
     cpt_job_uninit(&job);
-    cpt_job_init(&job);
-    ret = ESP_ERR_TIMEOUT;
-
-#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
-    log_system_status("Status prior initializing cooperative test");
-#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
-
-    cpt_coop_init(&coop, &job);
-    cpt_coop_run_job(&coop);
-
-    while(ret == ESP_ERR_TIMEOUT)
-    {
-        ret = cpt_coop_wait_for_time(&coop, 1000);
-        log_memory();
-    }
-
-    log_system_status("Cooperative test done");
-    cpt_coop_uninit(&coop);
-    cpt_job_uninit(&job);
-
-#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
-    log_system_status("Test completed");
-#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
 }

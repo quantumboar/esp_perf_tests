@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "esp_log.h": "c",
-        "task.h": "c"
+        "task.h": "c",
+        "cpt_globals.h": "c"
     }
 }
