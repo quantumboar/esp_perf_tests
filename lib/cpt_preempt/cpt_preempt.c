@@ -101,7 +101,7 @@ esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job)
     ret = cpt_preempt_set_state(preempt, CPT_STATE_INITIALIZING);
     ESP_GOTO_ON_ERROR(ret, exit, TAG, "Error setting state: %s", esp_err_to_name(ret));
 
-    for (uint8_t task_index = 0; task_index < CPT_TASK_COUNT; task_index ++)
+    for (uint8_t task_index = 0; task_index < CPT_CONCURRENCY_COUNT; task_index ++)
     {
         char task_name[configMAX_TASK_NAME_LEN];
         if (snprintf(task_name, configMAX_TASK_NAME_LEN, "task_%"PRIu8, task_index) < 0)
@@ -136,7 +136,7 @@ void cpt_preempt_uninit(cpt_preempt * preempt)
 {
     ESP_LOGI(TAG, "uninitializing");
 
-    for (int i = 0; i < CPT_TASK_COUNT; i ++)
+    for (int i = 0; i < CPT_CONCURRENCY_COUNT; i ++)
     {
         if (preempt->cpt_tasks[i].handle != NULL)
         {
@@ -163,7 +163,7 @@ static int8_t cpt_preempt_get_current_task_index(cpt_preempt * preempt)
         pdFALSE,    //don't query for stack info (faster)
         eNoAction); //don't query for task state (faster)
 
-    for (int8_t i = 0; i < CPT_TASK_COUNT; i ++)
+    for (int8_t i = 0; i < CPT_CONCURRENCY_COUNT; i ++)
     {
         if (preempt->cpt_tasks[i].handle == task_status.xHandle)
         {
@@ -189,7 +189,7 @@ static void cpt_preempt_task_function(void * parameters)
         return;
     }
 
-    if (atomic_fetch_add(&preempt->initialized_tasks_count, 1) == CPT_TASK_COUNT - 1)
+    if (atomic_fetch_add(&preempt->initialized_tasks_count, 1) == CPT_CONCURRENCY_COUNT - 1)
     {
         cpt_preempt_set_state(preempt, CPT_STATE_INITIALIZED);
     }
@@ -238,7 +238,7 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
     {
         do_spin = false;
 
-        for (int i = 0; i < CPT_TASK_COUNT; i ++)
+        for (int i = 0; i < CPT_CONCURRENCY_COUNT; i ++)
         {
             TaskStatus_t task_status;
             vTaskGetInfo(preempt->cpt_tasks[i].handle, &task_status, pdFALSE, eInvalid);
@@ -257,7 +257,7 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt)
     cpt_preempt_set_state(preempt, CPT_STATE_RUNNING);
 
     // Now resume all tasks. Time measurement should begin here
-    for (uint8_t i = 0; i < CPT_TASK_COUNT; i ++)
+    for (uint8_t i = 0; i < CPT_CONCURRENCY_COUNT; i ++)
     {
         vTaskResume(preempt->cpt_tasks[i].handle);
     }

@@ -50,7 +50,7 @@ typedef struct
 /// @brief Structure holding state for a preemoption test
 typedef struct
 {
-    cpt_preempt_task cpt_tasks[CPT_TASK_COUNT];
+    cpt_preempt_task cpt_tasks[CPT_CONCURRENCY_COUNT];
     atomic_uint_fast8_t initialized_tasks_count; // Used to determine when all tasks are initialized
 
     cpt_job * job;
@@ -65,7 +65,7 @@ typedef struct
 // Initializes all structures and tasks necessary to run the test. Tasks are suspended at creation and
 // will be resumed when calling the start function.
 esp_err_t cpt_preempt_init(cpt_preempt * preempt, cpt_job * job);
-void cpt_preempt_uninit(cpt_preempt * test);
+void cpt_preempt_uninit(cpt_preempt * preempt);
 
 // Starts the execution of the job scheduled for this preempt object
 // This call is not blocking
@@ -75,7 +75,7 @@ esp_err_t cpt_preempt_run_job(cpt_preempt * preempt);
 /// @details cpt_preempt objects signal an event at each relevant state change. A task (and just one) can use this method to block until the next state change
 ///        by using this function. It handles the race between setting the state and calling this method by virtue of a short spin on
 ///        atomic compare and swap
-/// @param max_wait_us the maximum wait time in ms, CPT_PREEMPT_WAIT_FOREVER to never timeout
+/// @param max_wait_us the maximum wait time in ms, CPT_WAIT_FOREVER to never timeout
 /// @param state the state to wait for
 /// @return ESP_OK in case of success, ESP_ERROR_TIMEOUT if the maximum time was reached.
 esp_err_t cpt_preempt_wait_for_state_change(cpt_preempt * preempt, uint32_t max_wait_ms, cpt_state state);

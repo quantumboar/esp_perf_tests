@@ -24,30 +24,33 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __CPT_GLOBALS_H__
 #define __CPT_GLOBALS_H__
 
-// Global defines for running the performance test. They're placed here rather than using
-// -D options in platformio.ini 'cause doing the latter always results into a tedious
-// rebuild-the-universe-just-in-case event which, with my 11 years old Linux laptop, translates
-// into a 10 minutes break just to test a different stack size. 
+#include <inttypes.h>
 
-// Number of concurrent tasks to run. In the cooperative single-task mode this means the count of
-// Parallel sub-fsms
-#define CPT_TASK_COUNT (2)
+// Number of "concurrent" workers to run. In the cooperative single-task mode this means the count of
+// Parallel sub-fsms. In the preemptive one it will be the number of tasks. For the preemptive test,
+// it's also possible to specify multi-core in cpt_preempt.h
+// TODO: figure out a way to have the cooperative test running in multi-core
+#define CPT_CONCURRENCY_COUNT (2)
 
 // Report system status more often if set to 0
 #define CPT_FREQUENT_SYSTEM_STATUS_REPORT (0)
 
-// Test to use (preemptive or cooperative)
+
+/*** the api to be used for the test is resolved at compile-time after defining cpt_type ***/
+// cpt_type will define what type is going to be used in the test (preemptive or cooperative)
 #define cpt_type cpt_preempt
 
-// No need to edit these (they're used to generate the symbols to use for the test)
-#define __METHOD(type, method) type ## _ ## method
-#define METHOD(...) __METHOD(__VA_ARGS__)
+// There's no need to change the lines below (they're used to generate the symbols to use for the cpt_type api)
+#define __CPT_METHOD(type, CPT_METHOD) type ## _ ## CPT_METHOD
+#define CPT_METHOD(...) __CPT_METHOD(__VA_ARGS__)
 
 // Compile-time solution for class abstraction
-#define cpt_init METHOD(cpt_type, init)
-#define cpt_uninit METHOD(cpt_type, uninit)
-#define cpt_run_job METHOD(cpt_type, run_job)
-#define cpt_wait_for_state_change METHOD(cpt_type, wait_for_state_change)
+#define cpt_init CPT_METHOD(cpt_type, init)
+#define cpt_uninit CPT_METHOD(cpt_type, uninit)
+#define cpt_run_job CPT_METHOD(cpt_type, run_job)
+#define cpt_wait_for_state_change CPT_METHOD(cpt_type, wait_for_state_change)
+
+/*** Generic definitions to be used by any implementation of the cpt_type api ***/
 
 // Use this in *_wait_for_state_change to disable timeout
 #define CPT_WAIT_FOREVER (0)
