@@ -21,43 +21,18 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-/*Contention Perf Test (cpt for short)*/
+#ifndef __CPT_UTILS_H__
+#define __CPT_UTILS_H__
 
-#include "esp_check.h"
-#include "cpt_preempt.h"
-#include "cpt_coop.h"
+#include <inttypes.h>
+#include "esp_err.h"
 
-#include "cpt_utils.h"
+/// @brief get the current time in ms
+uint64_t cpt_get_current_time_ms();
 
-#define TAG "cpt"
+/// @brief  Logs the systems status: memory, tasks stats, time
+/// @param label A label to be show in the header of the system status log
+/// @return ESP_OK or an error code
+esp_err_t cpt_log_system_status(const char * label);
 
-void app_main() {
-    cpt_job job;
-    cpt_type test;
-    esp_err_t ret = ESP_ERR_TIMEOUT;
-
-#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
-    cpt_log_system_status("Initial status");
-#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
-
-    cpt_job_init(&job);
-    cpt_init(&test, &job);
-    cpt_run_job(&test);
-
-#if CPT_FREQUENT_SYSTEM_STATUS_REPORT
-    cpt_log_system_status("Status prior starting test");
-#endif //CPT_FREQUENT_SYSTEM_STATUS_REPORT
-
-    ESP_LOGI(TAG, "Starting test");
-
-    uint64_t start_time = cpt_get_current_time_ms();
-    ret = cpt_wait_for_state_change(&test, CPT_WAIT_FOREVER, CPT_STATE_DONE);
-    uint64_t duration_ms = cpt_get_current_time_ms() - start_time;
-
-    cpt_log_system_status("Test completed");
-    ESP_LOGI(TAG, "return value: %s duration: %"PRIu64" ms", esp_err_to_name(ret), duration_ms);
-    cpt_uninit(&test);
-    ESP_LOGI(TAG, "return status: %s", esp_err_to_name(ret));
-
-    cpt_job_uninit(&job);
-}
+#endif // __CPT_UTILS_H__
