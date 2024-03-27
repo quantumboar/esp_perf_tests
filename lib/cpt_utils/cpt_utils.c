@@ -48,7 +48,7 @@ void cpt_log_memory()
     heap_caps_get_info(&heap_info, 0); // 0 matches all heaps, stats will be totalled across them
 
     ESP_LOGI(TAG, "==== Memory stats ====");
-    ESP_LOGI(TAG, "urrent free: %d minimum free: %d current allocated: %d",
+    ESP_LOGI(TAG, "Current free: %d minimum free: %d current allocated: %d",
         heap_info.total_free_bytes,
         heap_info.minimum_free_bytes,
         heap_info.total_allocated_bytes);

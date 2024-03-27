@@ -30,7 +30,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 /// @brief get the current time in ms
 uint64_t cpt_get_current_time_ms();
 
+/// @brief log the system mamory status
+void cpt_log_memory();
+
 /// @brief  Logs the systems status: memory, tasks stats, time
+/// @discussion to properyl log the task status (e.g. uxTaskGetSystemState) you'll need to enable the RTOS tracing features
+/// via setting the build option -DCONFIG_FREERTOS_USE_TRACE_FACILITY, f.e. for platformio.ini:
+/// build_flags = -DCONFIG_FREERTOS_USE_TRACE_FACILITY
+/// To generate thred stats, you'll also need GENERATE_RUN_TIME_STATS
 /// @param label A label to be show in the header of the system status log
 /// @return ESP_OK or an error code
 esp_err_t cpt_log_system_status(const char * label);
